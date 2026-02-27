@@ -1,99 +1,149 @@
 package your.domain.minecraft.realisticChicken;
 
-import org.bukkit.Bukkit;
-import org.bukkit.entity.Entity;
-import org.bukkit.entity.EntityType;
-import org.bukkit.entity.Animals;
-import org.bukkit.entity.ExperienceOrb;
-import org.bukkit.inventory.ItemStack;
-import org.bukkit.Material;
-import org.bukkit.event.Listener;
+import org.bukkit.*;
+import org.bukkit.entity.*;
 import org.bukkit.event.EventHandler;
-import org.bukkit.event.entity.EntityDropItemEvent;
-import org.bukkit.event.entity.EntityBreedEvent;
+import org.bukkit.event.Listener;
+import org.bukkit.event.entity.*;
+import org.bukkit.inventory.ItemStack;
+import org.bukkit.inventory.meta.ItemMeta;
+import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.plugin.java.JavaPlugin;
 
 import java.util.concurrent.ThreadLocalRandom;
 
 public final class RealisticChicken extends JavaPlugin implements Listener {
 
+    private NamespacedKey eggKey;
+
     @Override
     public void onEnable() {
-
+        saveDefaultConfig();
         Bukkit.getPluginManager().registerEvents(this, this);
-
         getLogger().info("RealisticChicken enabled");
+        eggKey = new NamespacedKey(this, "RC_fertilized");
 
+        String lang = getConfig().getString("language", "en");
+        LanguageManager.setLanguage(lang);
     }
 
     @Override
     public void onDisable() {
-
         getLogger().info("RealisticChicken disabled");
-
     }
 
-    /**
-     * ニワトリの自然な卵ドロップを無効化
-     */
+    /** 自動産卵を無精卵に変換 */
     @EventHandler
     public void onChickenLayEgg(EntityDropItemEvent event) {
-
-        Entity entity = event.getEntity();
-
-        if (entity.getType() != EntityType.CHICKEN) return;
+        if (!(event.getEntity() instanceof Chicken chicken)) return;
 
         ItemStack item = event.getItemDrop().getItemStack();
+        if (item.getType() != Material.EGG) return;
 
-        if (item.getType() == Material.EGG) {
-
-            // 自動産卵をキャンセル
-            event.setCancelled(true);
-
-        }
-
-    }
-
-    /**
-     * 繁殖時の処理
-     * ・子どもスポーンをキャンセル
-     * ・代わりに卵をドロップ
-     */
-    @EventHandler
-    public void onBreed(EntityBreedEvent event) {
-
-        if (!(event.getMother() instanceof org.bukkit.entity.Chicken)) return;
-
-        // 子どもスポーン防止
         event.setCancelled(true);
 
-        if (!(event.getMother() instanceof Animals mother)) return;
-        if (!(event.getFather() instanceof Animals father)) return;
+        ItemStack egg = createEgg(false);
+        chicken.getWorld().dropItemNaturally(chicken.getLocation().add(0, 0.5, 0), egg);
+    }
 
-        // バニラと同じクールダウン（5分）
+    /** 繁殖時の処理（子どもを作らず有精卵をドロップ） */
+    @EventHandler
+    public void onBreed(EntityBreedEvent event) {
+        if (!(event.getMother() instanceof Chicken mother)) return;
+        if (!(event.getFather() instanceof Chicken father)) return;
+
+        event.setCancelled(true);
+
         mother.setAge(6000);
         father.setAge(6000);
-
         mother.setLoveModeTicks(0);
         father.setLoveModeTicks(0);
 
-        var world = mother.getWorld();
+        World world = mother.getWorld();
 
-        // 卵を1～3個ランダム
         int eggCount = ThreadLocalRandom.current().nextInt(1, 4);
+        for (int i = 0; i < eggCount; i++) {
+            ItemStack egg = createEgg(true);
+            world.dropItemNaturally(mother.getLocation().add(0, 0.5, 0), egg);
+        }
 
-        var loc = mother.getLocation().clone().add(0, 0.6, 0);
+        int exp = ThreadLocalRandom.current().nextInt(1, 8);
+        ExperienceOrb orb = world.spawn(mother.getLocation().add(0, 0.5, 0), ExperienceOrb.class);
+        orb.setExperience(exp);
+    }
 
-        world.dropItemNaturally(
+    /** 有精卵か無精卵かを判定してItemStackを作成 */
+    private ItemStack createEgg(boolean fertilized) {
+        ItemStack egg = new ItemStack(Material.EGG, 1);
+        ItemMeta meta = egg.getItemMeta();
+        if (meta != null) {
+            meta.lore(java.util.List.of(LanguageManager.getEggLore(fertilized)));
+            meta.getPersistentDataContainer().set(eggKey, PersistentDataType.INTEGER, fertilized ? 1 : 0);
+            egg.setItemMeta(meta);
+        }
+        return egg;
+    }
+    /** 卵を投げた時にPersistentDataをコピー */
+    @EventHandler
+    public void onEggThrow(ProjectileLaunchEvent event) {
+        if (!(event.getEntity() instanceof Egg egg)) return;
+        if (!(egg.getShooter() instanceof Player player)) return;
+
+        ItemStack hand = player.getInventory().getItemInMainHand();
+        if (hand.getType() != Material.EGG) return;
+
+        ItemMeta meta = hand.getItemMeta();
+        if (meta == null) return;
+
+        Integer val = meta.getPersistentDataContainer().get(eggKey, PersistentDataType.INTEGER);
+        if (val == null) return;
+
+        egg.getPersistentDataContainer().set(eggKey, PersistentDataType.INTEGER, val);
+    }
+
+    @EventHandler
+    public void onCreatureSpawn(CreatureSpawnEvent event) {
+        if (event.getSpawnReason() == CreatureSpawnEvent.SpawnReason.EGG) {
+            event.setCancelled(true);
+        }
+    }
+    /** 卵がヒットした時の処理 */
+
+    @EventHandler
+    public void onEggHit(ProjectileHitEvent event) {
+        if (!(event.getEntity() instanceof Egg egg)) return;
+
+        Integer val = egg.getPersistentDataContainer().get(eggKey, PersistentDataType.INTEGER);
+        boolean fertilized = val != null && val == 1;
+
+        World world = egg.getWorld();
+        Location loc = egg.getLocation();
+
+        world.spawnParticle(
+                Particle.ITEM,
                 loc,
-                new ItemStack(Material.EGG, eggCount)
+                10,
+                0.2, 0.2, 0.2,
+                0.1,
+                new ItemStack(Material.EGG)
         );
 
-        // バニラと同じ経験値 1～7
-        int exp = ThreadLocalRandom.current().nextInt(1, 8);
+        if (!fertilized) {
+            egg.remove();
+            return;
+        }
+        
+        if (ThreadLocalRandom.current().nextInt(8) == 0) {
+            int chicksToSpawn = 1;
+            if (ThreadLocalRandom.current().nextInt(4) == 0) chicksToSpawn = 4;
 
-        ExperienceOrb orb = world.spawn(loc, ExperienceOrb.class);
-        orb.setExperience(exp);
+            for (int i = 0; i < chicksToSpawn; i++) {
+                Chicken chick = world.spawn(loc, Chicken.class);
+                chick.setAge(-24000);
+            }
+        }
+
+        egg.remove();
     }
 
 }
