@@ -9,7 +9,7 @@ RealisticChicken is a lightweight Paper/Spigot plugin that makes chicken breedin
 - Breeding still gives vanilla-equivalent experience (1–7 XP).
 - Chickens enter a 5-minute cooldown after breeding.
 - Supports Paper, Spigot, Bukkit.
-- Compatible with Minecraft 1.21.5~1.21.11.
+- Compatible with Minecraft 1.21.5 ~ 1.21.11.
 - No dependencies required.
 - Supports multiple languages for egg descriptions.
 
