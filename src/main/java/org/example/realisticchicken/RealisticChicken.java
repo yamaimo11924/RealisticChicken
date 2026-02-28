@@ -1,7 +1,14 @@
 package your.domain.minecraft.realisticChicken;
 
-import org.bukkit.*;
-import org.bukkit.entity.*;
+import com.destroystokyo.paper.event.entity.ThrownEggHatchEvent;
+import net.kyori.adventure.text.format.NamedTextColor;
+import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
+import org.bukkit.Bukkit;
+import org.bukkit.Material;
+import org.bukkit.NamespacedKey;
+import org.bukkit.entity.Chicken;
+import org.bukkit.entity.Egg;
+import org.bukkit.entity.ExperienceOrb;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.entity.*;
@@ -9,46 +16,51 @@ import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.plugin.java.JavaPlugin;
+import org.bukkit.Particle;
 
+import java.util.*;
 import java.util.concurrent.ThreadLocalRandom;
 
 public final class RealisticChicken extends JavaPlugin implements Listener {
 
-    private NamespacedKey eggKey;
+    private final NamespacedKey rc1Key = new NamespacedKey(this, "rc1_no_spawn");
 
-    @Override
     public void onEnable() {
-        saveDefaultConfig();
+        this.saveDefaultConfig();
         Bukkit.getPluginManager().registerEvents(this, this);
-        getLogger().info("RealisticChicken enabled");
-        eggKey = new NamespacedKey(this, "RC_fertilized");
-
-        String lang = getConfig().getString("language", "en");
+        String lang = this.getConfig().getString("language", "en");
+        new NamespacedKey(this, "RC_type");
         LanguageManager.setLanguage(lang);
+        this.getLogger().info("RealisticChicken enabled");
     }
 
-    @Override
     public void onDisable() {
-        getLogger().info("RealisticChicken disabled");
+        this.getLogger().info("RealisticChicken disabled");
     }
 
-    /** 自動産卵を無精卵に変換 */
     @EventHandler
-    public void onChickenLayEgg(EntityDropItemEvent event) {
-        if (!(event.getEntity() instanceof Chicken chicken)) return;
+    public void onEntityDropItem(EntityDropItemEvent event) {
 
-        ItemStack item = event.getItemDrop().getItemStack();
-        if (item.getType() != Material.EGG) return;
+        ItemStack drop = event.getItemDrop().getItemStack();
 
-        event.setCancelled(true);
+        if (drop.getType() == Material.EGG
+                || drop.getType().getKey().toString().equals("minecraft:blue_egg")
+                || drop.getType().getKey().toString().equals("minecraft:brown_egg")) {
 
-        ItemStack egg = createEgg(false);
-        chicken.getWorld().dropItemNaturally(chicken.getLocation().add(0, 0.5, 0), egg);
+            ItemMeta meta = drop.getItemMeta();
+
+            if (meta != null) {
+                meta.lore(List.of(LanguageManager.getInfertileEggLore()));
+                drop.setItemMeta(meta);
+            }
+        }
     }
 
-    /** 繁殖時の処理（子どもを作らず有精卵をドロップ） */
     @EventHandler
-    public void onBreed(EntityBreedEvent event) {
+    public void onChickenBreed(EntityBreedEvent event) {
+
+        if (event.isCancelled()) return;
+
         if (!(event.getMother() instanceof Chicken mother)) return;
         if (!(event.getFather() instanceof Chicken father)) return;
 
@@ -56,94 +68,111 @@ public final class RealisticChicken extends JavaPlugin implements Listener {
 
         mother.setAge(6000);
         father.setAge(6000);
+
         mother.setLoveModeTicks(0);
         father.setLoveModeTicks(0);
 
-        World world = mother.getWorld();
+        Material eggType;
+
+        if (mother.getVariant() == Chicken.Variant.WARM) {
+            eggType = Material.BROWN_EGG;
+        } else if (mother.getVariant() == Chicken.Variant.COLD) {
+            eggType = Material.BLUE_EGG;
+        } else {
+            eggType = Material.EGG;
+        }
 
         int eggCount = ThreadLocalRandom.current().nextInt(1, 4);
+
         for (int i = 0; i < eggCount; i++) {
-            ItemStack egg = createEgg(true);
-            world.dropItemNaturally(mother.getLocation().add(0, 0.5, 0), egg);
+            ItemStack egg = new ItemStack(eggType);
+
+            ItemMeta meta = egg.getItemMeta();
+            if (meta != null) {
+                meta.lore(List.of(LanguageManager.getFertilizedEggLore()));
+                egg.setItemMeta(meta);
+            }
+
+            mother.getWorld().dropItemNaturally(mother.getLocation().add(0, 0.5, 0), egg);
         }
 
         int exp = ThreadLocalRandom.current().nextInt(1, 8);
-        ExperienceOrb orb = world.spawn(mother.getLocation().add(0, 0.5, 0), ExperienceOrb.class);
-        orb.setExperience(exp);
-    }
-
-    /** 有精卵か無精卵かを判定してItemStackを作成 */
-    private ItemStack createEgg(boolean fertilized) {
-        ItemStack egg = new ItemStack(Material.EGG, 1);
-        ItemMeta meta = egg.getItemMeta();
-        if (meta != null) {
-            meta.lore(java.util.List.of(LanguageManager.getEggLore(fertilized)));
-            meta.getPersistentDataContainer().set(eggKey, PersistentDataType.INTEGER, fertilized ? 1 : 0);
-            egg.setItemMeta(meta);
-        }
-        return egg;
-    }
-    /** 卵を投げた時にPersistentDataをコピー */
-    @EventHandler
-    public void onEggThrow(ProjectileLaunchEvent event) {
-        if (!(event.getEntity() instanceof Egg egg)) return;
-        if (!(egg.getShooter() instanceof Player player)) return;
-
-        ItemStack hand = player.getInventory().getItemInMainHand();
-        if (hand.getType() != Material.EGG) return;
-
-        ItemMeta meta = hand.getItemMeta();
-        if (meta == null) return;
-
-        Integer val = meta.getPersistentDataContainer().get(eggKey, PersistentDataType.INTEGER);
-        if (val == null) return;
-
-        egg.getPersistentDataContainer().set(eggKey, PersistentDataType.INTEGER, val);
-    }
-
-    @EventHandler
-    public void onCreatureSpawn(CreatureSpawnEvent event) {
-        if (event.getSpawnReason() == CreatureSpawnEvent.SpawnReason.EGG) {
-            event.setCancelled(true);
-        }
-    }
-    /** 卵がヒットした時の処理 */
-
-    @EventHandler
-    public void onEggHit(ProjectileHitEvent event) {
-        if (!(event.getEntity() instanceof Egg egg)) return;
-
-        Integer val = egg.getPersistentDataContainer().get(eggKey, PersistentDataType.INTEGER);
-        boolean fertilized = val != null && val == 1;
-
-        World world = egg.getWorld();
-        Location loc = egg.getLocation();
-
-        world.spawnParticle(
-                Particle.ITEM,
-                loc,
-                10,
-                0.2, 0.2, 0.2,
-                0.1,
-                new ItemStack(Material.EGG)
+        mother.getWorld().spawn(
+                mother.getLocation().add(0, 0.5, 0),
+                ExperienceOrb.class,
+                orb -> orb.setExperience(exp)
         );
 
-        if (!fertilized) {
-            egg.remove();
-            return;
-        }
-        
-        if (ThreadLocalRandom.current().nextInt(8) == 0) {
-            int chicksToSpawn = 1;
-            if (ThreadLocalRandom.current().nextInt(4) == 0) chicksToSpawn = 4;
-
-            for (int i = 0; i < chicksToSpawn; i++) {
-                Chicken chick = world.spawn(loc, Chicken.class);
-                chick.setAge(-24000);
-            }
-        }
-
-        egg.remove();
     }
 
+    @EventHandler
+    public void onProjectileLaunch(ProjectileLaunchEvent event) {
+        if (!(event.getEntity() instanceof Egg egg)) return;
+
+        ItemStack item = egg.getItem();
+        if (item == null) return;
+
+        NamespacedKey itemKey = new NamespacedKey(this, "egg_item_id");
+        egg.getPersistentDataContainer().set(itemKey, PersistentDataType.STRING, item.getType().name());
+
+        ItemMeta meta = item.getItemMeta();
+        if (meta != null && meta.hasLore()) {
+            boolean isRC1 = false;
+            boolean isInfertile = false;
+            StringBuilder loreOutput = new StringBuilder();
+
+            for (var line : Objects.requireNonNull(meta.lore())) {
+                String text = PlainTextComponentSerializer.plainText().serialize(line);
+                loreOutput.append(text).append(" | ");
+                if (line.color() == NamedTextColor.AQUA && text.contains("【RC1】")) isRC1 = true;
+                if (text.contains("無精卵") || text.contains("Infertile")) isInfertile = true;
+            }
+
+            NamespacedKey rc1Key = new NamespacedKey(this, "rc1_no_spawn");
+            NamespacedKey infertileKey = new NamespacedKey(this, "rc1_infertile");
+            if (isRC1) egg.getPersistentDataContainer().set(rc1Key, PersistentDataType.BYTE, (byte)1);
+            if (isInfertile) egg.getPersistentDataContainer().set(infertileKey, PersistentDataType.BYTE, (byte)1);
+        }
+    }
+
+    @EventHandler
+    public void onProjectileHit(ProjectileHitEvent event) {
+        if (!(event.getEntity() instanceof Egg egg)) return;
+
+        NamespacedKey itemKey = new NamespacedKey(this, "egg_item_id");
+        NamespacedKey infertileKey = new NamespacedKey(this, "rc1_infertile");
+
+        String itemId = egg.getPersistentDataContainer().get(itemKey, PersistentDataType.STRING);
+        Byte infertileFlag = egg.getPersistentDataContainer().get(infertileKey, PersistentDataType.BYTE);
+
+        if (infertileFlag != null && infertileFlag == 1 && itemId != null) {
+
+            Material mat = Material.getMaterial(itemId);
+            if (mat != null) {
+                egg.getWorld().spawnParticle(
+                        Particle.ITEM,
+                        egg.getLocation(),
+                        8,
+                        0.2, 0.2, 0.2,
+                        0.05,
+                        new ItemStack(mat)
+                );
+            }
+            egg.remove();
+        }
+    }
+
+    @EventHandler
+    public void onEggHatch(ThrownEggHatchEvent event) {
+        Egg egg = event.getEgg();
+
+        NamespacedKey infertileKey = new NamespacedKey(this, "rc1_infertile");
+
+        Byte rc1Flag = egg.getPersistentDataContainer().get(rc1Key, PersistentDataType.BYTE);
+        Byte infertileFlag = egg.getPersistentDataContainer().get(infertileKey, PersistentDataType.BYTE);
+
+        if ((rc1Flag != null && rc1Flag == 1) || (infertileFlag != null && infertileFlag == 1)) {
+            event.setHatching(false);
+        }
+    }
 }
