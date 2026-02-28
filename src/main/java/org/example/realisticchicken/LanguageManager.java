@@ -11,13 +11,21 @@ public class LanguageManager {
         currentLang = lang;
     }
 
-    public static Component getEggLore(boolean fertilized) {
+    public static Component getInfertileEggLore() {
+
         if ("ja".equalsIgnoreCase(currentLang)) {
-            return Component.text(fertilized ? "【RC＋】有精卵" : "【RC＋】無精卵",
-                    fertilized ? NamedTextColor.GREEN : NamedTextColor.AQUA);
+            return Component.text("【RC1】 無精卵", NamedTextColor.AQUA);
         } else {
-            return Component.text(fertilized ? "[RC+] Fertilized Egg" : "[RC+] Infertile Egg",
-                    fertilized ? NamedTextColor.GREEN : NamedTextColor.AQUA);
+            return Component.text("【RC1】 Unfertilized Egg", NamedTextColor.AQUA);
+        }
+    }
+
+    public static Component getFertilizedEggLore() {
+
+        if ("ja".equalsIgnoreCase(currentLang)) {
+            return Component.text("【RC2】 有精卵", NamedTextColor.GREEN);
+        } else {
+            return Component.text("【RC2】 Fertilized Egg", NamedTextColor.GREEN);
         }
     }
 }
