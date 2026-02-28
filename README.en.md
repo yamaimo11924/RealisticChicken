@@ -32,9 +32,3 @@ This provides a more immersive and realistic farming experience.
 2. Place it in your server's `/plugins/` folder.
 3. Restart the server.
 
-## Perfect for
-
-- Survival servers
-- Realism-focused servers
-- Farming and economy servers
-- Vanilla+ gameplay enhancement
