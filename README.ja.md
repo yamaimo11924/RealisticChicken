@@ -10,7 +10,7 @@ RealisticChicken は、軽量な Paper/Spigot プラグインで、ニワトリ�
 - 繁殖時にもバニラ相当の経験値（1〜7XP）が得られます。
 - ニワトリは繁殖後、5分のクールダウンに入ります。
 - Paper、Spigot、Bukkit に対応。
-- Minecraft 1.21.x に対応。
+- Minecraft 1.21.5～1.21.11 に対応。
 - 依存プラグイン不要。
 - 卵の説明は複数言語に対応。
 
