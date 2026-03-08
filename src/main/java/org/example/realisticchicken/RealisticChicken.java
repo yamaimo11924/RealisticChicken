@@ -1,8 +1,6 @@
 package your.domain.minecraft.realisticChicken;
 
 import com.destroystokyo.paper.event.entity.ThrownEggHatchEvent;
-import net.kyori.adventure.text.format.NamedTextColor;
-import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
@@ -24,12 +22,13 @@ import java.util.concurrent.ThreadLocalRandom;
 public final class RealisticChicken extends JavaPlugin implements Listener {
 
     private final NamespacedKey rc1Key = new NamespacedKey(this, "rc1_no_spawn");
+    private final NamespacedKey infertileKey = new NamespacedKey(this, "rc1_infertile");
+    private final NamespacedKey itemKey = new NamespacedKey(this, "egg_item_id");
 
     public void onEnable() {
         this.saveDefaultConfig();
         Bukkit.getPluginManager().registerEvents(this, this);
         String lang = this.getConfig().getString("language", "en");
-        new NamespacedKey(this, "RC_type");
         LanguageManager.setLanguage(lang);
         this.getLogger().info("RealisticChicken enabled");
     }
@@ -50,7 +49,17 @@ public final class RealisticChicken extends JavaPlugin implements Listener {
             ItemMeta meta = drop.getItemMeta();
 
             if (meta != null) {
+
+                // Lore表示
                 meta.lore(List.of(LanguageManager.getInfertileEggLore()));
+
+                // ★追加（PDC）
+                meta.getPersistentDataContainer().set(
+                        infertileKey,
+                        PersistentDataType.BYTE,
+                        (byte)1
+                );
+
                 drop.setItemMeta(meta);
             }
         }
@@ -89,7 +98,17 @@ public final class RealisticChicken extends JavaPlugin implements Listener {
 
             ItemMeta meta = egg.getItemMeta();
             if (meta != null) {
+
+                // Lore表示
                 meta.lore(List.of(LanguageManager.getFertilizedEggLore()));
+
+                // ★追加（有精卵は rc1_no_spawn）
+                meta.getPersistentDataContainer().set(
+                        rc1Key,
+                        PersistentDataType.BYTE,
+                        (byte)1
+                );
+
                 egg.setItemMeta(meta);
             }
 
@@ -112,35 +131,29 @@ public final class RealisticChicken extends JavaPlugin implements Listener {
         ItemStack item = egg.getItem();
         if (item == null) return;
 
-        NamespacedKey itemKey = new NamespacedKey(this, "egg_item_id");
-        egg.getPersistentDataContainer().set(itemKey, PersistentDataType.STRING, item.getType().name());
+        egg.getPersistentDataContainer().set(
+                itemKey,
+                PersistentDataType.STRING,
+                item.getType().name()
+        );
 
         ItemMeta meta = item.getItemMeta();
-        if (meta != null && meta.hasLore()) {
-            boolean isRC1 = false;
-            boolean isInfertile = false;
-            StringBuilder loreOutput = new StringBuilder();
+        if (meta == null) return;
 
-            for (var line : Objects.requireNonNull(meta.lore())) {
-                String text = PlainTextComponentSerializer.plainText().serialize(line);
-                loreOutput.append(text).append(" | ");
-                if (line.color() == NamedTextColor.AQUA && text.contains("【RC1】")) isRC1 = true;
-                if (text.contains("無精卵") || text.contains("Infertile")) isInfertile = true;
-            }
+        // ★PDCをそのままコピー
+        Byte rc1Flag = meta.getPersistentDataContainer().get(rc1Key, PersistentDataType.BYTE);
+        Byte infertileFlag = meta.getPersistentDataContainer().get(infertileKey, PersistentDataType.BYTE);
 
-            NamespacedKey rc1Key = new NamespacedKey(this, "rc1_no_spawn");
-            NamespacedKey infertileKey = new NamespacedKey(this, "rc1_infertile");
-            if (isRC1) egg.getPersistentDataContainer().set(rc1Key, PersistentDataType.BYTE, (byte)1);
-            if (isInfertile) egg.getPersistentDataContainer().set(infertileKey, PersistentDataType.BYTE, (byte)1);
-        }
+        if (rc1Flag != null)
+            egg.getPersistentDataContainer().set(rc1Key, PersistentDataType.BYTE, rc1Flag);
+
+        if (infertileFlag != null)
+            egg.getPersistentDataContainer().set(infertileKey, PersistentDataType.BYTE, infertileFlag);
     }
 
     @EventHandler
     public void onProjectileHit(ProjectileHitEvent event) {
         if (!(event.getEntity() instanceof Egg egg)) return;
-
-        NamespacedKey itemKey = new NamespacedKey(this, "egg_item_id");
-        NamespacedKey infertileKey = new NamespacedKey(this, "rc1_infertile");
 
         String itemId = egg.getPersistentDataContainer().get(itemKey, PersistentDataType.STRING);
         Byte infertileFlag = egg.getPersistentDataContainer().get(infertileKey, PersistentDataType.BYTE);
@@ -165,8 +178,6 @@ public final class RealisticChicken extends JavaPlugin implements Listener {
     @EventHandler
     public void onEggHatch(ThrownEggHatchEvent event) {
         Egg egg = event.getEgg();
-
-        NamespacedKey infertileKey = new NamespacedKey(this, "rc1_infertile");
 
         Byte rc1Flag = egg.getPersistentDataContainer().get(rc1Key, PersistentDataType.BYTE);
         Byte infertileFlag = egg.getPersistentDataContainer().get(infertileKey, PersistentDataType.BYTE);
