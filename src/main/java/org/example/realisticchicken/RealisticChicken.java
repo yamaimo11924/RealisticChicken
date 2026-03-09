@@ -179,10 +179,10 @@ public final class RealisticChicken extends JavaPlugin implements Listener {
     public void onEggHatch(ThrownEggHatchEvent event) {
         Egg egg = event.getEgg();
 
-        Byte rc1Flag = egg.getPersistentDataContainer().get(rc1Key, PersistentDataType.BYTE);
         Byte infertileFlag = egg.getPersistentDataContainer().get(infertileKey, PersistentDataType.BYTE);
 
-        if ((rc1Flag != null && rc1Flag == 1) || (infertileFlag != null && infertileFlag == 1)) {
+        // 無精卵のみ孵化禁止
+        if (infertileFlag != null && infertileFlag == 1) {
             event.setHatching(false);
         }
     }
